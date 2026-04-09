@@ -1,65 +1,171 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useMemo, useState } from "react";
+import { BookOpen } from "lucide-react";
+import { LearningCard, type CardData } from "../components/LearningCard";
+import { Pagination } from "../components/Pagination";
+
+const CARDS_PER_PAGE = 10;
+
+export default function App() {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [cards, setCards] = useState<CardData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const totalPages = Math.max(1, Math.ceil(cards.length / CARDS_PER_PAGE));
+
+  const pageCards = useMemo(() => {
+    return cards.slice(
+      (currentPage - 1) * CARDS_PER_PAGE,
+      currentPage * CARDS_PER_PAGE,
+    );
+  }, [cards, currentPage]);
+
+  const loadCards = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/practice-sentences", {
+        method: "GET",
+        cache: "no-store",
+      });
+      const data = (await res.json()) as unknown;
+
+      if (!res.ok) {
+        const message =
+          typeof data === "object" && data !== null && "error" in data
+            ? String((data as { error: unknown }).error)
+            : "Failed to load sentences.";
+        throw new Error(message);
+      }
+
+      const sentences = (data as { sentences?: unknown }).sentences;
+      if (!Array.isArray(sentences)) {
+        throw new Error("Invalid data from server.");
+      }
+
+      setCards(sentences as CardData[]);
+      setCurrentPage(1);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load sentences.");
+      setCards([]);
+      setCurrentPage(1);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadCards();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <>
+      <div
+        className="min-h-screen"
+        style={{
+          background:
+            "radial-gradient(ellipse 100% 50% at 50% 0%, #fef9ec 0%, #fafaf9 60%)",
+        }}
+      >
+        {/* Header */}
+        <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-stone-100 shadow-sm">
+          <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-400 flex items-center justify-center shadow-md shadow-amber-200">
+                <BookOpen size={16} className="text-white" />
+              </div>
+              <div>
+                <h1 className="text-sm font-semibold text-stone-800">
+                  VN · EN · JP
+                </h1>
+                <p className="text-[10px] text-stone-400 tracking-widest uppercase">
+                  Translation Practice
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="bg-stone-100 text-stone-400 px-2.5 py-1 rounded-full">
+                Page {currentPage} of {totalPages}
+              </span>
+              <span className="bg-amber-50 text-amber-500 border border-amber-100 px-2.5 py-1 rounded-full">
+                {cards.length} cards total
+              </span>
+              <button
+                onClick={loadCards}
+                disabled={isLoading}
+                className="bg-white border border-stone-200 text-stone-500 px-2.5 py-1 rounded-full hover:bg-amber-50 hover:border-amber-200 hover:text-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150"
+              >
+                {isLoading ? "Loading..." : "Refresh"}
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Cards Grid */}
+        <main className="max-w-6xl mx-auto px-6 py-8">
+          {error && (
+            <div className="mb-4 rounded-2xl border border-rose-100 bg-rose-50/60 p-4 text-sm text-rose-700">
+              {error}
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="grid grid-cols-1 gap-4">
+              {Array.from({ length: CARDS_PER_PAGE }, (_, i) => (
+                <div
+                  key={i}
+                  className="bg-white/70 rounded-3xl border border-white/80 p-6 animate-pulse"
+                >
+                  <div className="h-4 w-2/3 bg-stone-200/70 rounded mb-3" />
+                  <div className="h-3 w-1/2 bg-stone-200/60 rounded mb-6" />
+                  <div className="h-9 w-full bg-stone-200/60 rounded-lg" />
+                  <div className="h-9 w-full bg-stone-200/50 rounded-lg mt-3" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {pageCards.map((card, i) => (
+                <LearningCard
+                  key={card.id}
+                  data={card}
+                  index={(currentPage - 1) * CARDS_PER_PAGE + i + 1}
+                />
+              ))}
+            </div>
+          )}
+
+          {!isLoading && cards.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPrev={() => goToPage(Math.max(1, currentPage - 1))}
+              onNext={() => goToPage(Math.min(totalPages, currentPage + 1))}
+              onGo={goToPage}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+          )}
+
+          <p className="text-center text-xs text-stone-300 pb-6">
+            Press{" "}
+            <kbd className="bg-stone-100 text-stone-400 px-1.5 py-0.5 rounded text-xs">
+              Enter
+            </kbd>{" "}
+            to check &nbsp;·&nbsp;{" "}
+            <kbd className="bg-stone-100 text-stone-400 px-1.5 py-0.5 rounded text-xs">
+              Esc
+            </kbd>{" "}
+            to reset
+          </p>
+        </main>
+      </div>
+    </>
   );
 }
