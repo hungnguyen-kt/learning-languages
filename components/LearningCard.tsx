@@ -39,7 +39,7 @@ export function LearningCard({ data, index }: LearningCardProps) {
       <div className="relative bg-linear-to-br from-stone-50/80 via-amber-50/30 to-orange-50/20 rounded-2xl px-5 py-4 border border-stone-100/60 backdrop-blur-sm">
         <div className="absolute inset-0 bg-linear-to-r from-amber-400/5 to-transparent rounded-2xl" />
         <p
-          className="relative text-base font-semibold text-stone-800 leading-relaxed"
+          className="relative flex items-center text-base font-semibold text-stone-800 leading-relaxed"
           lang="vi"
         >
           <span className="inline-flex items-center text-[10px] mr-2 font-semibold tracking-wider uppercase text-amber-600 bg-linear-to-r from-amber-100 to-orange-50 px-3 py-1 rounded-full border border-amber-200/60 shadow-sm">

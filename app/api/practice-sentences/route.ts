@@ -12,6 +12,9 @@ type PracticeSentencesResponse = {
   sentences: PracticeSentence[];
 };
 
+const MAX_RETRIES = 3;
+const RETRY_DELAYS_MS = [700, 1500, 3000] as const;
+
 const prompt = `
 You are generating practice sentences for a language learning website.
 
@@ -65,6 +68,31 @@ function isValidResponse(data: unknown): data is PracticeSentencesResponse {
   return true;
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : JSON.stringify(error);
+}
+
+function isQuotaError(message: string): boolean {
+  return (
+    message.includes("429 Too Many Requests") ||
+    message.toLowerCase().includes("quota exceeded")
+  );
+}
+
+function isTransientModelError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    message.includes("503 Service Unavailable") ||
+    lower.includes("high demand") ||
+    lower.includes("temporarily unavailable") ||
+    lower.includes("internal error")
+  );
+}
+
 export async function GET() {
   const apiKey = process.env.GEMINI_API_KEY;
 
@@ -75,57 +103,77 @@ export async function GET() {
     );
   }
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: "models/gemini-2.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-      },
-    });
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: "models/gemini-2.5-flash",
+    generationConfig: {
+      responseMimeType: "application/json",
+    },
+  });
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const cleaned = text.replace(/```json|```/g, "").trim();
+  let lastErrorMessage = "";
 
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const json = JSON.parse(cleaned) as unknown;
-      if (isValidResponse(json)) {
-        return NextResponse.json(json, {
-          headers: { "Cache-Control": "no-store" },
-        });
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      const cleaned = text.replace(/```json|```/g, "").trim();
+
+      try {
+        const json = JSON.parse(cleaned) as unknown;
+        if (isValidResponse(json)) {
+          return NextResponse.json(json, {
+            headers: { "Cache-Control": "no-store" },
+          });
+        }
+
+        return NextResponse.json(
+          { error: "Invalid response shape from Gemini.", raw: text },
+          { status: 502 },
+        );
+      } catch {
+        return NextResponse.json({ raw: text }, { status: 502 });
+      }
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      lastErrorMessage = message;
+
+      if (isQuotaError(message)) {
+        return NextResponse.json(
+          {
+            error:
+              "AI daily quota has been exceeded. Please try again later or tomorrow.",
+          },
+          { status: 429 },
+        );
       }
 
-      return NextResponse.json(
-        { error: "Invalid response shape from Gemini.", raw: text },
-        { status: 502 },
-      );
-    } catch {
-      return NextResponse.json({ raw: text }, { status: 502 });
+      const canRetry = isTransientModelError(message) && attempt < MAX_RETRIES;
+      if (!canRetry) {
+        break;
+      }
+
+      await sleep(RETRY_DELAYS_MS[attempt]);
     }
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : JSON.stringify(error);
+  }
 
-    const isQuotaError =
-      typeof message === "string" &&
-      (message.includes("429 Too Many Requests") ||
-        message.toLowerCase().includes("quota exceeded"));
-
-    if (isQuotaError) {
-      return NextResponse.json(
-        {
-          error:
-            "AI daily quota has been exceeded. Please try again later or tomorrow.",
-        },
-        { status: 429 },
-      );
-    }
-
+  if (isTransientModelError(lastErrorMessage)) {
     return NextResponse.json(
-      { error: "Failed to generate practice sentences.", detail: message },
-      { status: 500 },
+      {
+        error:
+          "Gemini is currently overloaded. Please try again in a few seconds.",
+        detail: lastErrorMessage,
+      },
+      { status: 503 },
     );
   }
+
+  return NextResponse.json(
+    {
+      error: "Failed to generate practice sentences.",
+      detail: lastErrorMessage,
+    },
+    { status: 500 },
+  );
 }
 

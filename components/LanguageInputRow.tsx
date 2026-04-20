@@ -65,9 +65,7 @@ export function LanguageInputRow({
   return (
     <div className="flex items-center gap-2 w-full">
       <span className="text-lg select-none shrink-0">{flag}</span>
-      <div
-        className="flex-1 flex items-center border rounded-lg px-2.5 py-1.5 transition-all duration-200 bg-white border-stone-200 focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-50"
-      >
+      <div className="flex-1 flex items-center border rounded-lg px-2.5 py-1.5 transition-all duration-200 bg-white border-stone-200 focus-within:border-amber-400 focus-within:ring-2 focus-within:ring-amber-50">
         <input
           type="text"
           disabled={isChecking}
@@ -93,9 +91,12 @@ export function LanguageInputRow({
         className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 bg-stone-100 text-stone-400 hover:bg-amber-400 hover:text-white active:scale-95"
         aria-label="Check answer"
       >
-        {isChecking ? <span className="text-[10px] font-medium">...</span> : "✓"}
+        {isChecking ? (
+          <span className="text-[10px] font-medium">...</span>
+        ) : (
+          "✓"
+        )}
       </button>
     </div>
   );
 }
-
